@@ -21,3 +21,7 @@ bin/
 __pycache__/
 .pytest_cache/
 *.pyc
+.venv/
+__pycache__/
+.pytest_cache/
+*.pyc
