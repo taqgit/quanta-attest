@@ -1,0 +1,56 @@
+# Intent layer: what must remain true.
+#
+# Each invariant is a plain-language statement that either holds or is
+# violated, with no third state. `declaration` is its one-line machine form;
+# `rules` are the gateway rules that enforce it (policy/gateway.rego);
+# `controls` are the control areas it supports. Clause numbers are confirmed
+# against the ingested documents before any evidence pack is issued.
+
+invariants:
+  - id: INV-0
+    statement: An agent proposes actions; only the policy gateway can let one run
+    declaration: agent.direct_execution = forbidden
+    rules: [structure]
+    controls: [Human oversight, Security design]
+
+  - id: INV-1
+    statement: No tool action runs without a recorded policy decision
+    declaration: decision.recorded = required
+    rules: [R0]
+    controls: [Record-keeping and audit]
+
+  - id: INV-2
+    statement: Sensitive data never leaves the organization
+    declaration: egress.sensitive = forbidden
+    rules: [R4]
+    controls: [Privacy and data protection]
+
+  - id: INV-3
+    statement: Every consequential action has a named human approver who is not the requester and who approves exactly what runs
+    declaration: approval.consequential = required; approver != requester; approval.seal = execution.seal
+    rules: [R3, R5]
+    controls: [Human oversight]
+
+  - id: INV-4
+    statement: Instructions inside retrieved content never trigger a tool
+    declaration: trigger.from_retrieved = forbidden
+    rules: [R1]
+    controls: [Security design]
+
+  - id: INV-5
+    statement: Every answer cites the source it relies on
+    declaration: answer.citation = required
+    rules: [answer-check]
+    controls: [Transparency and explainability]
+
+  - id: INV-6
+    statement: "No decision is made on missing facts: an unknown classification or an untraceable instruction means a human decides"
+    declaration: facts.unknown = hold_for_human
+    rules: [R6]
+    controls: [Accountability, Human oversight]
+
+  - id: INV-7
+    statement: Decisions use facts the gateway established itself, never the agent's own claims
+    declaration: facts.self_declared = untrusted
+    rules: [facts]
+    controls: [Security design, Accountability]

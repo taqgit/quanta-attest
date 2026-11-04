@@ -1,0 +1,156 @@
+# Quanta Attest corpus registry
+#
+# The repository holds this list of links, never the documents themselves.
+# `python -m quanta_attest.ingest` downloads each document from its official
+# source into data/raw/ (git-ignored) and records what it fetched.
+#
+# url_status:
+#   verified - URL seen on the publisher's site on 2026-10-29
+#   confirm  - open the publisher's index page, find the document, paste the
+#              direct URL here, then set url_status to verified
+#
+# Ingest never edits this file. What it actually fetched (date, SHA-256,
+# size, chunk count) is recorded in data/manifest.json.
+
+profiles:
+  public-sector: Public sector (Ontario and Canada)
+  cross-industry: Cross-industry
+  regulated: Regulated industry
+
+documents:
+  # ---------- Public sector ----------
+  - id: on-ai-directive
+    profile: public-sector
+    title: Responsible Use of Artificial Intelligence Directive
+    publisher: Government of Ontario (MPBSDP)
+    version: In effect since 2024-12-01
+    url: https://www.ontario.ca/page/responsible-use-artificial-intelligence-directive
+    url_status: verified
+    format: html
+    terms: Crown copyright (King's Printer for Ontario). Non-commercial reproduction allowed with credit and no changes; commercial use needs a licence. https://www.ontario.ca/page/copyright-information
+    credit: "© King's Printer for Ontario"
+
+  - id: go-its-200prs
+    profile: public-sector
+    title: "GO-ITS 200PRS: OPS Enterprise Architecture Governance Requirements"
+    publisher: Government of Ontario
+    version: Current version on ontario.ca
+    url: https://www.ontario.ca/page/go-its-200prs-ontario-public-service-enterprise-architecture-governance-requirements
+    url_status: verified
+    format: html
+    terms: Crown copyright (King's Printer for Ontario); see on-ai-directive.
+    credit: "© King's Printer for Ontario"
+
+  - id: go-its-25-0
+    profile: public-sector
+    title: "GO-ITS 25.0: General Security Requirements"
+    publisher: Government of Ontario
+    version: Current version on ontario.ca
+    url: https://www.ontario.ca/page/information-technology-standards
+    url_status: confirm
+    format: html
+    terms: Crown copyright (King's Printer for Ontario); see on-ai-directive.
+    credit: "© King's Printer for Ontario"
+
+  - id: go-its-25-11
+    profile: public-sector
+    title: "GO-ITS 25.11: Security Design Requirements"
+    publisher: Government of Ontario
+    version: Current version on ontario.ca
+    url: https://www.ontario.ca/page/information-technology-standards
+    url_status: confirm
+    format: html
+    terms: Crown copyright (King's Printer for Ontario); see on-ai-directive.
+    credit: "© King's Printer for Ontario"
+
+  - id: go-its-25-21
+    profile: public-sector
+    title: "GO-ITS 25.21: Cloud First Principles and Security Requirements"
+    publisher: Government of Ontario
+    version: Current version on ontario.ca
+    url: https://www.ontario.ca/page/information-technology-standards
+    url_status: confirm
+    format: html
+    terms: Crown copyright (King's Printer for Ontario); see on-ai-directive.
+    credit: "© King's Printer for Ontario"
+
+  - id: ca-dadm
+    profile: public-sector
+    title: Directive on Automated Decision-Making
+    publisher: Treasury Board of Canada Secretariat
+    version: Current version; confirm amendment date on Day 1
+    url: https://www.tbs-sct.canada.ca/pol/doc-eng.aspx?id=32592
+    url_status: verified
+    format: html
+    terms: Government of Canada. Non-commercial reproduction allowed with credit; commercial reproduction needs permission.
+    credit: "© His Majesty the King in Right of Canada"
+
+  - id: on-ipc-ohrc-ai-principles
+    profile: public-sector
+    title: Principles for the Responsible Use of Artificial Intelligence (IPC and OHRC)
+    publisher: Information and Privacy Commissioner of Ontario and Ontario Human Rights Commission
+    version: January 2026
+    url: https://www.ipc.on.ca/
+    url_status: confirm
+    format: html
+    terms: Check the publisher's terms page before ingesting.
+    credit: IPC Ontario and OHRC
+    optional: true
+
+  # ---------- Cross-industry ----------
+  - id: nist-ai-rmf
+    profile: cross-industry
+    title: "Artificial Intelligence Risk Management Framework (AI RMF 1.0), NIST AI 100-1"
+    publisher: NIST
+    version: January 2023
+    url: https://nvlpubs.nist.gov/nistpubs/ai/NIST.AI.100-1.pdf
+    url_status: confirm
+    format: pdf
+    terms: Works of NIST employees are not subject to copyright in the US (17 U.S.C. 105); may be subject to foreign copyright. https://www.nist.gov/open/copyright-fair-use-and-licensing-statements-srd-data-software-and-technical-series-publications
+    credit: National Institute of Standards and Technology
+
+  - id: nist-csf-2
+    profile: cross-industry
+    title: "The NIST Cybersecurity Framework (CSF) 2.0, NIST CSWP 29"
+    publisher: NIST
+    version: February 2024
+    url: https://nvlpubs.nist.gov/nistpubs/CSWP/NIST.CSWP.29.pdf
+    url_status: confirm
+    format: pdf
+    terms: Same as nist-ai-rmf.
+    credit: National Institute of Standards and Technology
+
+  - id: oecd-ai-recommendation
+    profile: cross-industry
+    title: Recommendation of the Council on Artificial Intelligence (OECD/LEGAL/0449)
+    publisher: OECD
+    version: Revised May 2024
+    url: https://legalinstruments.oecd.org/en/instruments/OECD-LEGAL-0449
+    url_status: verified
+    format: html
+    terms: Content may be copied for own use; excerpts may be included in other works with acknowledgement. Show excerpts only.
+    credit: OECD
+    excerpts_only: true
+
+  # ---------- Regulated industry ----------
+  - id: eu-ai-act
+    profile: regulated
+    title: "Artificial Intelligence Act, Regulation (EU) 2024/1689"
+    publisher: European Union (EUR-Lex)
+    version: Official Journal text
+    url: https://eur-lex.europa.eu/eli/reg/2024/1689/oj/eng
+    url_status: confirm
+    format: html
+    terms: Reuse allowed, commercial or not, with the source acknowledged (Commission Decision 2011/833/EU).
+    credit: "© European Union, https://eur-lex.europa.eu"
+
+  - id: osfi-e23
+    profile: regulated
+    title: "Guideline E-23: Model Risk Management (2027)"
+    publisher: Office of the Superintendent of Financial Institutions (OSFI)
+    version: Final 2025-09-11; effective 2027-05-01
+    url: https://www.osfi-bsif.gc.ca/en/guidance/guidance-library/guideline-e-23-model-risk-management-2027
+    url_status: verified
+    format: html
+    terms: Government of Canada terms; non-commercial reproduction allowed with credit.
+    credit: "© His Majesty the King in Right of Canada (OSFI)"

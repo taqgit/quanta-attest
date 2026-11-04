@@ -1,0 +1,22 @@
+SYNTHETIC TEST TEXT. Mimics the article structure of a regulation. It is not
+the text of any real regulation.
+
+Article 1
+Subject matter
+
+This sample regulation lays down rules for sample AI systems.
+
+Article 12
+Record-keeping
+
+Sample high-risk systems shall technically allow for the automatic recording of events over their lifetime, so that the functioning of the system can be traced.
+
+Article 14
+Human oversight
+
+Sample high-risk systems shall be designed so that natural persons can oversee them effectively, including the ability to decide not to use the system or to override its output.
+
+Annex III
+High-risk use cases
+
+Sample areas include access to essential public services and benefits.

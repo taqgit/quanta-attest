@@ -1,0 +1,26 @@
+SYNTHETIC TEST TEXT. Written for the test suite to mimic a policy document's
+structure. It is not the text of any real directive.
+
+# Sample AI Directive
+
+## 1 Introduction
+
+This sample directive sets out requirements for the responsible use of artificial intelligence by sample organizations.
+
+## 2 Principles
+
+AI use must be transparent, accountable and secure. People affected by an AI-supported decision should be able to get a meaningful explanation.
+
+## 3 Application and scope
+
+### 3.1 In scope
+
+The directive applies to all sample ministries that use AI systems, whether developed in-house or procured.
+
+### 3.2 Out of scope
+
+Research prototypes that never reach production are out of scope.
+
+## 4 Risk management
+
+Organizations must assess the risk of each AI use case before deployment and keep the assessment current. High-risk use cases require human oversight of decisions, logging of system actions, and an audit trail that can be reviewed independently.

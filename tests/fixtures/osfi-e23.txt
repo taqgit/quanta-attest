@@ -1,0 +1,18 @@
+SYNTHETIC TEST TEXT. Mimics a numbered guideline. It is not the text of any
+real guideline.
+
+A. Overview
+
+A.1 Purpose
+
+This sample guideline sets expectations for managing model risk across an enterprise.
+
+A.2 Scope
+
+The sample guideline applies to all models with non-negligible risk, including AI and machine learning models and models sourced from third parties.
+
+C. Risk assessment
+
+C.2 Model risk rating
+
+Each model is assigned a risk rating that considers both quantitative and qualitative factors, and the rating sets the intensity of validation and monitoring.

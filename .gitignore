@@ -1,0 +1,23 @@
+# Downloaded documents and derived chunks are never committed:
+# the repository redistributes links, not publishers' text.
+data/
+!data/.gitkeep
+
+# Secrets
+.env
+*.key
+*.pem
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+venv/
+
+# Local OPA binary (download from openpolicyagent.org)
+bin/
+.venv/
+__pycache__/
+.pytest_cache/
+*.pyc

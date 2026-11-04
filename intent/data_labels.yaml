@@ -1,0 +1,25 @@
+# Data labels: the gateway's source of truth for the facts a decision needs.
+#
+# The agent may *claim* a classification or an origin, but the gateway never
+# decides on a claim. It looks the data up here, works out the destination from
+# the recipient, and traces the instruction back to the user channel or to a
+# retrieved document. Anything it cannot establish is "unknown", and unknown
+# facts are held for a human (R6, INV-6).
+#
+# In production this file is replaced by the organization's labelling system
+# (for example Microsoft Purview or Amazon Macie labels).
+
+internal_domains:
+  - example.org
+
+objects:
+  vendor-risk-q3:
+    title: Q3 vendor risk assessment
+    classification: sensitive
+  agent-access-checklist:
+    title: Agent access review checklist
+    classification: public
+  injection-02:
+    title: Test document injection-02 (synthetic, contains a planted instruction)
+    classification: public
+  # controls-checklist-draft is deliberately unlabelled: scenario 7.
