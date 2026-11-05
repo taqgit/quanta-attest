@@ -10,7 +10,7 @@ import hashlib
 import json
 import uuid
 
-from . import tools
+from . import assist, tools
 from .facts import FactResolver
 from .invariants import invariants_for_rule, load_invariants
 from .ledger import Ledger, Signer
@@ -28,6 +28,8 @@ def request_seal(request_id: str, tool: str, args: dict, facts: dict, requested_
     body = {"request_id": request_id, "tool": tool, "args": args, "requested_by": requested_by, "rule": rule,
             "policy_version": version, "classification": facts.get("classification"),
             "destination": facts.get("destination"), "origin": facts.get("origin")}
+    if "environment" in facts:
+        body["environment"] = facts["environment"]
     return hashlib.sha256(json.dumps(body, sort_keys=True, separators=(",", ":"), default=str).encode()).hexdigest()
 
 
@@ -86,23 +88,25 @@ class Session:
         args = dict(args or {})
         requested_by = requested_by or f"{role.lower()}-1"
         facts = self.resolver.resolve(tool, args, instruction, self.user_turns, self.retrieved, claimed)
-        req = Request(tool=tool, role=role, classification=facts.classification,
-                      destination=facts.destination, origin=facts.origin)
+        req = self._request(tool, role, facts)
         meta = {"request_id": rid, "tool": tool, "role": role, "requested_by": requested_by,
                 **facts.as_meta(), "claimed": claimed or {}}
         rec_req = self.ledger.append("Model", "tool_request", meta, {"args": args, "instruction": instruction})
         d = evaluate(req, self.engine)
         version = policy_version()
         seal = request_seal(rid, tool, args, meta, requested_by, d.rule, version)
+        lane = self._assist(d, tool, role, args, instruction, meta, requested_by, extra_turns=[])
         rec_dec = self.ledger.append("Gateway", "policy_decision", {
             "request_id": rid, "decision": d.decision, "rule": d.rule, "reason": d.reason, "engine": d.engine,
             "policy_version": version, "invariants": invariants_for_rule(d.rule, self.invariants),
-            "seal": seal, "fact_conflicts": len(facts.conflicts),
+            "seal": seal, "fact_conflicts": len(facts.conflicts), "assist": lane["tips"],
+            "assist_alternative": lane["alternative"]["summary"] if lane["alternative"] else None,
         })
         outcome = {"request_id": rid, "tool": tool, "role": role, "requested_by": requested_by, "args": args,
                    "instruction": instruction, "meta": meta, "decision": d.decision, "rule": d.rule,
                    "reason": d.reason, "engine": d.engine, "not_evaluable": d.not_evaluable, "seal": seal,
-                   "conflicts": facts.conflicts, "receipts": [rec_req["seq"], rec_dec["seq"]], "result": None}
+                   "conflicts": facts.conflicts, "assist": lane, "receipts": [rec_req["seq"], rec_dec["seq"]],
+                   "result": None}
         if d.decision == "ALLOW":
             self.state[rid] = "allowed"
             outcome["result"] = self._execute(rid, tool, args, outcome)
@@ -113,6 +117,43 @@ class Session:
             self.state[rid] = "denied"
         self.outcomes.append(outcome)
         return outcome
+
+    @staticmethod
+    def _request(tool: str, role: str, facts) -> Request:
+        return Request(tool=tool, role=role, classification=facts.classification, destination=facts.destination,
+                       origin=facts.origin, environment=facts.environment, infra_findings=len(facts.findings))
+
+    def _assist(self, d, tool: str, role: str, args: dict, instruction: str, meta: dict, requested_by: str,
+                extra_turns: list[str]) -> dict:
+        """Lane assist for a deny or hold; any suggested alternative is checked by the same policy first."""
+        if d.decision == "ALLOW":
+            return {"tips": [], "alternative": None}
+        out = {"tips": assist.tips(d.rule, tool, args, meta, requested_by), "alternative": None}
+        alt = assist.alternative_args(d.rule, tool, args)
+        if alt is not None:
+            facts = self.resolver.resolve(tool, alt, instruction, self.user_turns + extra_turns, self.retrieved)
+            ad = evaluate(self._request(tool, role, facts), self.engine)
+            out["alternative"] = {"args": alt, "decision": ad.decision, "rule": ad.rule, "reason": ad.reason,
+                                  "summary": f"{ad.decision} by {ad.rule}: {ad.reason}"}
+        return out
+
+    def check(self, tool: str, role: str, args: dict | None = None, instruction: str = "",
+              claimed: dict | None = None, requested_by: str | None = None, typed_by_user: bool = False) -> dict:
+        """Check before you run: what the gateway would decide. Nothing is recorded and nothing runs.
+
+        `typed_by_user=True` treats the instruction as typed by the person asking, as on the check screen or in a
+        build pipeline where the change was committed by a person.
+        """
+        args = dict(args or {})
+        extra = [instruction] if typed_by_user and instruction else []
+        facts = self.resolver.resolve(tool, args, instruction, self.user_turns + extra, self.retrieved, claimed)
+        d = evaluate(self._request(tool, role, facts), self.engine)
+        meta = facts.as_meta()
+        return {"tool": tool, "role": role, "decision": d.decision, "rule": d.rule, "reason": d.reason,
+                "engine": d.engine, "not_evaluable": d.not_evaluable, "meta": meta, "conflicts": facts.conflicts,
+                "assist": self._assist(d, tool, role, args, instruction, meta, requested_by or f"{role.lower()}-1",
+                                       extra),
+                "recorded": False}
 
     def _record(self, event: str, rid: str) -> dict | None:
         return next((r for r in reversed(self.ledger.records)

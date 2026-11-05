@@ -21,7 +21,7 @@ from quanta_attest.ledger import verify
 from quanta_attest.policy import find_opa, rego_snippet
 from quanta_attest.registry import REPO_ROOT, load_registry
 from quanta_attest.facts import FactResolver
-from quanta_attest.scenarios import SCENARIOS, propose_scenario, run_all
+from quanta_attest.scenarios import SCENARIOS, propose_scenario, run_all, scenario_args
 from quanta_attest.search import KeywordIndex
 from quanta_attest.session import Session, policy_version
 from quanta_attest.value import OFFERS, SOURCES, Inputs, compute
@@ -55,6 +55,20 @@ def invariant_lines(ids: list[str]) -> str:
     return "\n".join(f"- **{i}** {by_id[i].statement}  \n  `{by_id[i].declaration}`" for i in ids if i in by_id)
 
 
+def show_assist(lane: dict) -> None:
+    """Lane assist: what would pass, with any alternative already checked by the same policy."""
+    if not lane or not (lane["tips"] or lane["alternative"]):
+        return
+    lines = "\n".join(f"- {t}" for t in lane["tips"])
+    st.info(f"**Lane assist: what would pass**\n\n{lines}")
+    alt = lane["alternative"]
+    if alt:
+        label = "Not evaluable, held" if alt["rule"] == "R6" else BADGE[alt["decision"]]
+        st.markdown(f"**Safer version, already checked by the policy:** {label} by {alt['rule']} ({alt['reason']}).")
+        with st.expander("The safer version of the request"):
+            st.json(alt["args"])
+
+
 def show_outcome(o: dict) -> None:
     label = "Not evaluable: held for a human" if o["not_evaluable"] else BADGE[o["decision"]]
     box = {"ALLOW": st.success, "REQUIRE_APPROVAL": st.warning, "DENY": st.error}[o["decision"]]
@@ -66,8 +80,16 @@ def show_outcome(o: dict) -> None:
         c3.metric("Origin", o["meta"]["origin"])
         c4.metric("Receipts", " ".join(f"#{n}" for n in o["receipts"]))
         basis = o["meta"]["facts_basis"]
-        st.caption(f"Facts established by the gateway, not the agent (INV-7): classification from "
-                   f"{basis['classification']}; origin {basis['origin']}; destination: {basis['destination']}.")
+        if "environment" in basis:
+            findings = o["meta"].get("infra_findings", [])
+            st.caption(f"Facts established by the gateway from the plan itself, not the agent (INV-7): "
+                       f"environment {o['meta']['environment']} ({basis['environment']}); "
+                       f"{len(findings)} exposure finding(s); origin {basis['origin']}.")
+            for f in findings:
+                st.markdown(f"- `{f['resource']}`: {f['detail']}")
+        else:
+            st.caption(f"Facts established by the gateway, not the agent (INV-7): classification from "
+                       f"{basis['classification']}; origin {basis['origin']}; destination: {basis['destination']}.")
         for c in o["conflicts"]:
             st.warning(f"The agent claimed {c['fact']} = **{c['claimed']}**; the gateway established "
                        f"**{c['established']}**. The decision used the established fact, and the conflict is "
@@ -76,6 +98,10 @@ def show_outcome(o: dict) -> None:
         st.markdown(f"Status: **{state}** · engine: {o['engine']} · {o['request_id']} · seal `{o['seal'][:12]}`")
         if o["result"]:
             st.markdown(f"Tool result: {o['result']['summary']}" + (" (mocked)" if o["result"].get("mocked") else ""))
+        show_assist(o.get("assist"))
+        with st.expander("The request as proposed"):
+            st.markdown(f"Instruction: “{o.get('instruction', '')}”")
+            st.json(o["args"])
         dec = next((r for r in s.ledger.records if r["event"] == "policy_decision"
                     and r["meta"]["request_id"] == o["request_id"]), None)
         if dec:
@@ -94,7 +120,7 @@ with st.sidebar:
     st.divider()
     labels = {"All profiles": None, **{v: k for k, v in profiles.items()}}
     profile = labels[st.selectbox("Sector profile", list(labels))]
-    role = st.selectbox("Acting as", ["Architect", "Reviewer", "Auditor"],
+    role = st.selectbox("Acting as", ["Architect", "Engineer", "Reviewer", "Auditor"],
                         help="Role switching stands in for single sign-on.")
     name = st.text_input("Your name", value="alex",
                          help="Stands in for a signed-in identity. Whoever requests an action cannot approve it.").strip() or "alex"
@@ -119,9 +145,10 @@ if page == "Tour":
                      hide_index=True, width="stretch")
     with t2:
         st.subheader("Every action gets exactly one decision before it runs")
-        st.write("Run the scripted session: two questions and six proposed actions. A Reviewer who is not the "
-                 "requester approves the review ticket and rejects the email with no data classification. In two "
-                 "requests the agent makes false claims; the gateway overrides both.")
+        st.write("Run the scripted session: two questions and nine proposed actions, six by a business agent and "
+                 "three by a coding agent changing infrastructure. A Reviewer who is not the requester approves the "
+                 "review ticket and the production change, and rejects the email with no data classification. In "
+                 "three requests the agent makes false claims; the gateway overrides all three.")
         if st.button("Run the demo script", type="primary"):
             run_all(s, profile)
         for o in s.outcomes:
@@ -180,6 +207,27 @@ elif page == "Policy decisions":
     for i, sc in enumerate(tool_scenarios):
         if cols[i % 3].button(f"{sc['id']} · {sc['title']}", width="stretch"):
             propose_scenario(s, sc, name)
+    with st.expander("Check before you run (nothing is recorded or run)"):
+        st.caption("Ask the gateway what it would decide, with lane assist, before proposing anything. Developers "
+                   "run the same check from the command line and in the build pipeline: "
+                   "`python -m quanta_attest.check plan <file>`.")
+        presets = {f"{x['id']} · {x['title']}": x for x in SCENARIOS if x["kind"] == "tool"}
+        pick = st.selectbox("Start from", list(presets), index=len(presets) - 3, key="chk-pick")
+        base = presets[pick]
+        chk_args = st.text_area("Request (JSON)", json.dumps(scenario_args(base), indent=2), height=220,
+                                key=f"chk-args-{base['id']}")
+        chk_instr = st.text_input("Instruction, as you would type it", base["instruction"], key=f"chk-in-{base['id']}")
+        if st.button("Check only"):
+            try:
+                r = s.check(base["tool"], role, json.loads(chk_args), chk_instr, base.get("claimed"),
+                            requested_by=name, typed_by_user=True)
+                label = "Not evaluable: held for a human" if r["not_evaluable"] else BADGE[r["decision"]]
+                box = {"ALLOW": st.success, "REQUIRE_APPROVAL": st.warning, "DENY": st.error}[r["decision"]]
+                box(f"**Would be: {label}** · rule {r['rule']}: {r['reason']}")
+                show_assist(r["assist"])
+                st.caption(f"Nothing was recorded or run: the ledger still has {len(s.ledger.records)} records.")
+            except json.JSONDecodeError as exc:
+                st.error(f"The request is not valid JSON: {exc}")
     with st.expander("Try your own request"):
         st.caption("You control what really happened. The agent's claims are shown to the gateway, which ignores "
                    "them and establishes the facts itself.")

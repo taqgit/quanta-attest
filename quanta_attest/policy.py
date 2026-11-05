@@ -19,7 +19,9 @@ from pathlib import Path
 from .registry import REPO_ROOT
 
 REGO_PATH = REPO_ROOT / "policy" / "gateway.rego"
-KNOWN_ROLES = {"Architect", "Reviewer", "Auditor"}
+KNOWN_ROLES = {"Architect", "Engineer", "Reviewer", "Auditor"}
+CHANGE_ROLES = {"Architect", "Engineer"}
+INFRA_TOOLS = {"apply_infra_change"}
 NEEDS_CLASSIFICATION = {"send_external_email"}
 DECISIONS = ("ALLOW", "REQUIRE_APPROVAL", "DENY")
 
@@ -31,6 +33,8 @@ class Request:
     classification: str | None = None  # "public", "sensitive" or None when unknown
     destination: str = "internal"  # "internal" or "external"
     origin: str | None = None  # "user", "retrieved" or "unknown"; never assumed to be "user"
+    environment: str | None = None  # infrastructure only: "prod" or "nonprod"; None when unknown
+    infra_findings: int = 0  # infrastructure only: exposure findings the gateway read from the plan
 
     def to_input(self) -> dict:
         data = asdict(self)
@@ -60,6 +64,10 @@ def evaluate_python(req: Request) -> Decision:
         return d("REQUIRE_APPROVAL", "R6", "Not evaluable: instruction origin unknown")
     if req.tool in NEEDS_CLASSIFICATION and req.classification not in ("public", "sensitive"):
         return d("REQUIRE_APPROVAL", "R6", "Not evaluable: data classification missing")
+    if req.tool in INFRA_TOOLS and req.infra_findings > 0:
+        return d("DENY", "R7", "Infrastructure change would open admin access or storage to the internet, or turn off encryption")
+    if req.tool in INFRA_TOOLS and req.environment not in ("prod", "nonprod"):
+        return d("REQUIRE_APPROVAL", "R6", "Not evaluable: target environment unknown")
     if req.tool in ("search_corpus", "draft_checklist") and req.role in KNOWN_ROLES:
         return d("ALLOW", "R2", "Read-only tool")
     if req.tool == "file_review_ticket" and req.role == "Architect":
@@ -69,6 +77,10 @@ def evaluate_python(req: Request) -> Decision:
     if (req.tool == "send_external_email" and req.classification == "public"
             and req.destination == "external" and req.role == "Architect"):
         return d("REQUIRE_APPROVAL", "R5", "External email needs a Reviewer")
+    if req.tool in INFRA_TOOLS and req.environment == "prod" and req.role in CHANGE_ROLES:
+        return d("REQUIRE_APPROVAL", "R8", "Production change needs a Reviewer")
+    if req.tool in INFRA_TOOLS and req.environment == "nonprod" and req.role in CHANGE_ROLES:
+        return d("ALLOW", "R9", "Safe change to a non-production environment")
     return d("DENY", "R0", "No rule allows this request")
 
 

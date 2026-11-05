@@ -107,13 +107,23 @@ def build(records: list[dict], invariants: list[Invariant], verified: VerifyResu
                 else f"uncited answer at record {bad[0]}", bad or [a["seq"] for a in answers])
         elif inv.id == "INV-6":
             unknown = [r for r, q in reqs.items() if q["meta"]["origin"] != "retrieved" and (
-                       q["meta"]["origin"] == "unknown" or
-                       (q["meta"]["tool"] in NEEDS_CLASSIFICATION and q["meta"]["classification"] == "unknown"))]
+                       q["meta"]["origin"] == "unknown" or q["meta"].get("environment") == "unknown" or
+                       (q["meta"]["tool"] in NEEDS_CLASSIFICATION and q["meta"]["classification"] == "unknown"))
+                       and not q["meta"].get("infra_findings")]
             bad = [decs[r]["seq"] for r in unknown if r in decs and decs[r]["meta"]["decision"] == "ALLOW"]
             row(inv, "Violated" if bad else ("Held" if unknown else "Not exercised"),
                 f"{_plural(len(unknown), 'request')} with a missing fact held for a human by R6" if not bad
                 else f"request with a missing fact was allowed at record {bad[0]}",
                 bad or [decs[r]["seq"] for r in unknown if r in decs])
+        elif inv.id == "INV-8":
+            exposed = [results[r]["seq"] for r in results
+                       if reqs[r]["meta"]["tool"] == "apply_infra_change" and reqs[r]["meta"].get("infra_findings")]
+            denied = [d["seq"] for d in decs.values() if d["meta"]["rule"] == "R7"]
+            infra = [q for q in reqs.values() if q["meta"]["tool"] == "apply_infra_change"]
+            row(inv, "Violated" if exposed else ("Held" if infra else "Not exercised"),
+                f"{_plural(len(infra), 'infrastructure change')} checked; {_plural(len(denied), 'exposing change')} "
+                "denied by R7" if not exposed else f"exposing change applied at record {exposed[0]}",
+                exposed or denied or [q["seq"] for q in infra])
         elif inv.id == "INV-7":
             untrusted = [q["seq"] for q in reqs.values() if q["meta"].get("facts_source") != "gateway"]
             overridden = [q for q in reqs.values() if q["meta"].get("fact_conflicts")]

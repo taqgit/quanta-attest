@@ -12,6 +12,15 @@
 internal_domains:
   - example.org
 
+# Infrastructure workspaces the gateway recognizes. Anything else is unknown
+# and the change is held for a human (R6).
+environments:
+  prod: prod
+  production: prod
+  dev: nonprod
+  test: nonprod
+  staging: nonprod
+
 objects:
   vendor-risk-q3:
     title: Q3 vendor risk assessment

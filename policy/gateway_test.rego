@@ -49,3 +49,27 @@ test_missing_origin_is_never_user if {
 	d.rule == "R6"
 	d.decision == "REQUIRE_APPROVAL"
 }
+
+test_exposing_infra_change_denied if {
+	d := gateway.decision with input as {"tool": "apply_infra_change", "role": "Engineer", "origin": "user", "environment": "nonprod", "infra_findings": 1}
+	d.rule == "R7"
+	d.decision == "DENY"
+}
+
+test_infra_unknown_environment_held if {
+	d := gateway.decision with input as {"tool": "apply_infra_change", "role": "Engineer", "origin": "user", "infra_findings": 0}
+	d.rule == "R6"
+	d.reason == "Not evaluable: target environment unknown"
+}
+
+test_prod_change_needs_reviewer if {
+	d := gateway.decision with input as {"tool": "apply_infra_change", "role": "Engineer", "origin": "user", "environment": "prod", "infra_findings": 0}
+	d.rule == "R8"
+	d.decision == "REQUIRE_APPROVAL"
+}
+
+test_dev_change_allowed if {
+	d := gateway.decision with input as {"tool": "apply_infra_change", "role": "Engineer", "origin": "user", "environment": "nonprod", "infra_findings": 0}
+	d.rule == "R9"
+	d.decision == "ALLOW"
+}

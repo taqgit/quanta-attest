@@ -1,0 +1,42 @@
+# Policy regression cases: gateway inputs (facts already established) and the decision expected.
+# Run in the build pipeline with:  python -m quanta_attest.check cases policy/cases.yaml
+cases:
+  - name: planted instruction is denied first
+    input: {tool: send_external_email, role: Architect, classification: public, destination: external, origin: retrieved}
+    expect: {decision: DENY, rule: R1}
+  - name: untraceable instruction is held
+    input: {tool: draft_checklist, role: Architect, origin: unknown}
+    expect: {decision: REQUIRE_APPROVAL, rule: R6}
+  - name: missing data label is held
+    input: {tool: send_external_email, role: Architect, destination: external, origin: user}
+    expect: {decision: REQUIRE_APPROVAL, rule: R6}
+  - name: sensitive email is denied
+    input: {tool: send_external_email, role: Architect, classification: sensitive, destination: external, origin: user}
+    expect: {decision: DENY, rule: R4}
+  - name: public external email needs a Reviewer
+    input: {tool: send_external_email, role: Architect, classification: public, destination: external, origin: user}
+    expect: {decision: REQUIRE_APPROVAL, rule: R5}
+  - name: read-only tool is allowed
+    input: {tool: draft_checklist, role: Engineer, origin: user}
+    expect: {decision: ALLOW, rule: R2}
+  - name: review ticket needs a Reviewer
+    input: {tool: file_review_ticket, role: Architect, origin: user}
+    expect: {decision: REQUIRE_APPROVAL, rule: R3}
+  - name: exposing infrastructure change is denied even in dev
+    input: {tool: apply_infra_change, role: Engineer, origin: user, environment: nonprod, infra_findings: 1}
+    expect: {decision: DENY, rule: R7}
+  - name: infrastructure change with unknown target is held
+    input: {tool: apply_infra_change, role: Engineer, origin: user}
+    expect: {decision: REQUIRE_APPROVAL, rule: R6}
+  - name: safe production change needs a Reviewer
+    input: {tool: apply_infra_change, role: Engineer, origin: user, environment: prod}
+    expect: {decision: REQUIRE_APPROVAL, rule: R8}
+  - name: safe dev change is allowed
+    input: {tool: apply_infra_change, role: Engineer, origin: user, environment: nonprod}
+    expect: {decision: ALLOW, rule: R9}
+  - name: auditor cannot change infrastructure
+    input: {tool: apply_infra_change, role: Auditor, origin: user, environment: nonprod}
+    expect: {decision: DENY, rule: R0}
+  - name: unknown tool is denied
+    input: {tool: delete_database, role: Architect, origin: user}
+    expect: {decision: DENY, rule: R0}

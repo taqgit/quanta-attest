@@ -1,0 +1,14 @@
+{
+  "workspace": "prod",
+  "changes": [
+    {
+      "resource": "audit-exports",
+      "type": "storage_bucket",
+      "action": "create",
+      "attrs": {
+        "public_access": false,
+        "encryption": true
+      }
+    }
+  ]
+}

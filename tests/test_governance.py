@@ -1,4 +1,4 @@
-"""Tests for the intent, enforcement and evidence layers (acceptance criteria AC4 to AC9, AC13, AC15, AC16)."""
+"""Tests for the intent, enforcement and evidence layers (acceptance criteria AC4 to AC9, AC13, AC15 to AC19)."""
 
 import copy
 import itertools
@@ -14,8 +14,9 @@ from quanta_attest.chunk import chunk_document
 from quanta_attest.invariants import load_invariants
 from quanta_attest.ledger import Ledger, Signer, verify
 from quanta_attest.policy import Request, evaluate, evaluate_python, find_opa, rego_snippet
-from quanta_attest.facts import FactResolver
-from quanta_attest.scenarios import REQUESTER, REVIEWER, SCENARIOS, propose_scenario, run_all
+from quanta_attest.assist import remediate_plan
+from quanta_attest.facts import FactResolver, infra_findings
+from quanta_attest.scenarios import REQUESTER, REVIEWER, SCENARIOS, propose_scenario, run_all, scenario_args
 from quanta_attest.search import KeywordIndex
 from quanta_attest.session import Session
 from quanta_attest.value import Inputs, compute
@@ -42,7 +43,7 @@ def session(index):
 
 def test_invariants_cover_every_rule():
     invs = load_invariants()
-    assert [i.id for i in invs] == [f"INV-{n}" for n in range(8)]
+    assert [i.id for i in invs] == [f"INV-{n}" for n in range(9)]
     rego = (REPO / "policy" / "gateway.rego").read_text()
     for inv in invs:
         assert inv.declaration and "=" in inv.declaration
@@ -82,14 +83,17 @@ def test_missing_fact_is_never_allowed():  # AC13
 @pytest.mark.skipif(not find_opa(), reason="OPA binary not available")
 def test_python_reference_matches_rego():
     tools_ = ["search_corpus", "draft_checklist", "file_review_ticket", "send_external_email", "unknown_tool"]
-    roles = ["Architect", "Reviewer", "Auditor", "Intern"]
+    roles = ["Architect", "Engineer", "Reviewer", "Auditor", "Intern"]
     classes = ["public", "sensitive", None]
     dests = ["internal", "external"]
     origins = ["user", "retrieved", "unknown", None]
-    for combo in itertools.product(tools_, roles, classes, dests, origins):
-        req = Request(*combo)
+    combos = [Request(*c) for c in itertools.product(tools_, roles, classes, dests, origins)]
+    combos += [Request("apply_infra_change", role, None, "internal", origin, env, findings)
+               for role, origin, env, findings in itertools.product(roles, origins, ["prod", "nonprod", None], [0, 2])]
+    assert len(combos) == 720
+    for req in combos:
         py, rego = evaluate_python(req), evaluate(req, "opa")
-        assert (py.decision, py.rule) == (rego.decision, rego.rule), combo
+        assert (py.decision, py.rule, py.reason) == (rego.decision, rego.rule, rego.reason), req
 
 
 def test_engine_error_fails_closed(monkeypatch):
@@ -100,7 +104,7 @@ def test_engine_error_fails_closed(monkeypatch):
 
 
 def test_rego_snippets_available_for_display():
-    for rule in ("R0", "R1", "R2", "R3", "R4", "R5", "R6"):
+    for rule in ("R0", "R1", "R2", "R3", "R4", "R5", "R6", "R7", "R8", "R9"):
         assert rule in rego_snippet(rule)
 
 
@@ -116,7 +120,10 @@ def test_scenarios_end_to_end(session):
     assert out[7]["not_evaluable"] and session.state[out[7]["request_id"]] == "rejected" and out[7]["result"] is None
     assert out[8]["decision"] == "ALLOW" and out[8]["result"] is not None
     assert (out[9]["decision"], out[9]["rule"], out[9]["result"]) == ("DENY", "R4", None)
-    assert len(SCENARIOS) == 9
+    assert (out[10]["decision"], out[10]["rule"]) == ("DENY", "R7")
+    assert out[11]["rule"] == "R8" and session.state[out[11]["request_id"]] == "approved"
+    assert (out[12]["decision"], out[12]["rule"]) == ("ALLOW", "R9") and out[12]["result"] is not None
+    assert len(SCENARIOS) == 12
 
 
 def test_no_tool_runs_without_decision_or_approval(session):  # AC4, AC6
@@ -259,6 +266,92 @@ def test_ledger_keeps_its_own_copy(session):
     assert session.ledger.payloads[req["payload_hash"]]["args"]["title"] != "changed by the caller"
 
 
+# ---------- infrastructure gate (INV-8, AC19) ----------
+
+def _scenario(n):
+    return next(x for x in SCENARIOS if x["id"] == n)
+
+
+def test_infra_findings_read_from_the_plan():
+    plan = {"workspace": "dev", "changes": [
+        {"resource": "a", "attrs": {"port": [80, 3389], "source": "0.0.0.0/0"}},
+        {"resource": "b", "attrs": {"port": 22, "source": "10.0.0.0/8"}},
+        {"resource": "c", "attrs": {"public_access": True, "encryption": False}},
+        {"resource": "d", "attrs": {"port": 443, "source": "0.0.0.0/0"}}]}
+    assert sorted(f["issue"] for f in infra_findings(plan)) == ["admin_port_open", "encryption_disabled", "public_storage"]
+    assert infra_findings(remediate_plan(plan)) == []
+    assert plan["changes"][0]["attrs"]["source"] == "0.0.0.0/0"  # remediation works on a copy
+
+
+def test_exposing_change_denied_with_checked_alternative(session):
+    o = propose_scenario(session, _scenario(10))
+    assert (o["decision"], o["rule"], o["result"]) == ("DENY", "R7", None)
+    alt = o["assist"]["alternative"]
+    assert alt and (alt["decision"], alt["rule"]) == ("REQUIRE_APPROVAL", "R8")
+    assert alt["args"]["plan"]["changes"][0]["attrs"]["source"] == "10.0.0.0/8"
+    assert any("port 22 open to 0.0.0.0/0" in t for t in o["assist"]["tips"])
+    dec = next(r for r in session.ledger.records if r["event"] == "policy_decision")
+    assert dec["meta"]["assist_alternative"].startswith("REQUIRE_APPROVAL by R8") and dec["meta"]["assist"]
+
+
+def test_prod_change_claimed_as_dev_is_held(session):
+    o = propose_scenario(session, _scenario(11))
+    assert (o["decision"], o["rule"], o["meta"]["environment"]) == ("REQUIRE_APPROVAL", "R8", "prod")
+    assert {"fact": "environment", "claimed": "dev", "established": "prod"} in o["conflicts"]
+
+
+def test_unknown_workspace_is_held(session):
+    session.command("apply it")
+    o = session.propose("apply_infra_change", "Engineer", {"plan": {"workspace": "sandbox-7", "changes": []}},
+                        "apply it", claimed={"environment": "dev"})
+    assert (o["decision"], o["rule"], o["meta"]["environment"]) == ("REQUIRE_APPROVAL", "R6", "unknown")
+    assert any("workspace" in t for t in o["assist"]["tips"])
+
+
+def test_evidence_flags_applied_exposing_change():
+    led = Ledger()
+    led.append("Model", "tool_request", {"request_id": "REQ-001", "tool": "apply_infra_change", "role": "Engineer",
+                                          "origin": "user", "classification": "unknown", "destination": "internal",
+                                          "environment": "prod", "facts_source": "gateway",
+                                          "infra_findings": [{"issue": "admin_port_open"}]})
+    led.append("Tool", "tool_result", {"request_id": "REQ-001", "tool": "apply_infra_change", "ok": True, "mocked": True})
+    status = {r["id"]: r["status"] for r in evidence.build(led.records, load_invariants())["rows"]}
+    assert status["INV-8"] == "Violated"
+
+
+# ---------- lane assist and check before you run (AC17, AC18) ----------
+
+def test_lane_assist_on_every_deny_and_hold(session):
+    out = {o["scenario"]: o for o in run_all(session)}
+    for n in (3, 4, 5, 7, 9, 10, 11):
+        assert out[n]["assist"]["tips"], n
+    assert out[8]["assist"]["tips"] == [] and out[12]["assist"]["tips"] == []
+    assert any("summary that is labelled public" in t for t in out[4]["assist"]["tips"])
+    assert any("in their own words" in t for t in out[5]["assist"]["tips"])
+
+
+def test_check_records_and_runs_nothing(session):
+    run_all(session)
+    before = (len(session.ledger.records), dict(session.state), len(session.queue))
+    for s in [x for x in SCENARIOS if x["kind"] == "tool"]:
+        r = session.check(s["tool"], s["role"], scenario_args(s), s["instruction"], s.get("claimed"), typed_by_user=True)
+        assert r["recorded"] is False and r["decision"] in ("ALLOW", "REQUIRE_APPROVAL", "DENY")
+    assert (len(session.ledger.records), dict(session.state), len(session.queue)) == before
+
+
+def test_check_cli_for_pipelines():
+    def run(*a):
+        return subprocess.run([sys.executable, "-m", "quanta_attest.check", *a], cwd=REPO,
+                              capture_output=True, text=True)
+    deny = run("plan", "examples/plans/open-ssh-prod.json", "--engine", "python")
+    assert deny.returncode == 1 and "DENY by R7" in deny.stdout and "checked alternative" in deny.stdout
+    assert run("plan", "examples/plans/test-bucket-dev.json", "--engine", "python").returncode == 0
+    assert run("plan", "examples/plans/audit-bucket-prod.json", "--engine", "python",
+               "--expect", "REQUIRE_APPROVAL").returncode == 0
+    cases = run("cases", "policy/cases.yaml")
+    assert cases.returncode == 0 and "all passed" in cases.stdout
+
+
 # ---------- evidence ----------
 
 def _ledger(session):
@@ -310,7 +403,7 @@ def test_wrong_key_and_payload_edit(session):
 def test_evidence_pack_all_held(session):
     run_all(session)
     pack = evidence.build(session.ledger.records, session.invariants)
-    assert {row["id"]: row["status"] for row in pack["rows"]} == {f"INV-{n}": "Held" for n in range(8)}
+    assert {row["id"]: row["status"] for row in pack["rows"]} == {f"INV-{n}": "Held" for n in range(9)}
     assert all(row["receipts"] for row in pack["rows"])
     md = evidence.to_markdown(pack, session.id, "all", "rego-test")
     assert "INV-6" in md and "No compliance or certification claim" in md

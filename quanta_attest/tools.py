@@ -41,9 +41,16 @@ def _search_corpus(args: dict) -> dict:
     return {"mocked": False, "summary": f"Searched the corpus for: {args.get('query', '')}"}
 
 
+def _apply_infra_change(args: dict) -> dict:
+    plan = args.get("plan") or {}
+    n = len(plan.get("changes", []) or [])
+    return {"mocked": True, "summary": f"Would apply {n} change(s) to workspace {plan.get('workspace', '?')}"}
+
+
 TOOLS = {
     "search_corpus": _search_corpus,
     "draft_checklist": _draft_checklist,
     "file_review_ticket": _file_review_ticket,
     "send_external_email": _send_external_email,
+    "apply_infra_change": _apply_infra_change,
 }

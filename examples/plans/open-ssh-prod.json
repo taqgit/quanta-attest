@@ -1,0 +1,15 @@
+{
+  "workspace": "prod",
+  "changes": [
+    {
+      "resource": "payments-vm-nsg",
+      "type": "network_rule",
+      "action": "update",
+      "attrs": {
+        "direction": "inbound",
+        "port": 22,
+        "source": "0.0.0.0/0"
+      }
+    }
+  ]
+}

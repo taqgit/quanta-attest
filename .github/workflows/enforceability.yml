@@ -1,0 +1,32 @@
+# Enforceability checks on every push and pull request: the policy, its regression cases,
+# the test suite, and a preflight of the example infrastructure plans. A plan the gateway
+# would deny fails the build before anything is deployed.
+name: enforceability
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: open-policy-agent/setup-opa@v2
+        with:
+          version: 1.4.2
+      - run: pip install -r requirements.txt
+      - name: Rego unit tests
+        run: opa test policy -v
+      - name: Policy regression cases (OPA and Python reference)
+        run: python -m quanta_attest.check cases policy/cases.yaml
+      - name: Test suite
+        run: python -m pytest -q
+      - name: Preflight example infrastructure plans
+        run: |
+          python -m quanta_attest.check plan examples/plans/open-ssh-prod.json --expect DENY
+          python -m quanta_attest.check plan examples/plans/audit-bucket-prod.json --expect REQUIRE_APPROVAL
+          python -m quanta_attest.check plan examples/plans/test-bucket-dev.json --expect ALLOW
